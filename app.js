@@ -991,23 +991,33 @@ function attachEvents() {
     }
   });
 
-  canvas.addEventListener(
-    "wheel",
-    (e) => {
-      if (!state.character.image) return;
+canvas.addEventListener(
+  "wheel",
+  (e) => {
+    if (!state.character.image) return;
 
-      const pos = getCanvasPointerPosition(e);
-      if (!isPointInsideCharacter(pos.x, pos.y)) return;
+    const pos = getCanvasPointerPosition(e);
+    if (!isPointInsideCharacter(pos.x, pos.y)) return;
 
-      e.preventDefault();
+    e.preventDefault();
 
-      const delta = e.deltaY < 0 ? 1.05 : 0.95;
+    if (e.ctrlKey) {
+      const rotateStep = 2;
+      state.character.rotation += e.deltaY < 0 ? rotateStep : -rotateStep;
+
+      state.character.rotation =
+        ((state.character.rotation % 360) + 360) % 360;
+    } else {
+      const scaleStep = 1.05;
+      const delta = e.deltaY < 0 ? scaleStep : 1 / scaleStep;
       state.character.scale = clamp(state.character.scale * delta, 0.2, 3);
-      persistState();
-      render();
-    },
-    { passive: false }
-  );
+    }
+
+    persistState();
+    render();
+  },
+  { passive: false }
+);
 
   ui.saveBtn.addEventListener("click", () => {
     const exportCanvas = document.createElement("canvas");
