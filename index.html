@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BELLEMA Schedule</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="panel__header">
+        <h1>BELLEMA Schedule Maker</h1>
+      </div>
+
+      <section class="section">
+        <h2>이미지 편집</h2>
+
+        <div class="field">
+          <label for="characterFile">이미지 업로드</label>
+          <input type="file" id="characterFile" accept="image/*" />
+        </div>
+
+        <div class="btn-row">
+          <button type="button" id="resetCharacterBtn">이미지 위치 초기화</button>
+          <button type="button" id="removeCharacterBtn" class="danger">이미지 제거</button>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="characterRotation">회전</label>
+            <input type="range" id="characterRotation" min="-180" max="180" step="1" value="0" />
+          </div>
+
+          <div class="field">
+            <label for="characterOpacity">투명도</label>
+            <input type="range" id="characterOpacity" min="0" max="1" step="0.01" value="1" />
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button type="button" id="flipXBtn">좌우반전</button>
+          <button type="button" id="flipYBtn">상하반전</button>
+        </div>
+
+        <p class="hint">
+          좌측 이미지 영역을 클릭하면 업로드할 수 있어요.<br>이미지를 드래그하면 위치를 이동할 수 있어요.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>스케줄 편집</h2>
+        <div id="scheduleForm" class="schedule-form"></div>
+      </section>
+
+      <section class="section">
+        <h2>저장</h2>
+        <div class="btn-row">
+          <button type="button" id="saveBtn" class="primary">PNG 저장</button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="preview-wrap">
+      <div class="preview-toolbar">
+        <span>Preview 1920 × 1080</span>
+      </div>
+
+      <div class="canvas-stage" id="canvasStage">
+        <canvas id="previewCanvas" width="1920" height="1080"></canvas>
+      </div>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
