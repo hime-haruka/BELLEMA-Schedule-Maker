@@ -250,16 +250,61 @@ function buildScheduleForm() {
 
     const timeInput = document.createElement("input");
     timeInput.type = "text";
+    timeInput.inputMode = "numeric";
+    timeInput.maxLength = 5;
     timeInput.maxLength = 5;
     timeInput.placeholder = "00:00";
     timeInput.dataset.day = dayKey;
     timeInput.dataset.kind = "time";
     timeInput.value = dayState.time;
     timeInput.addEventListener("input", (e) => {
-      state.days[dayKey].time = e.target.value;
+      const formatted = formatTimeInput(e.target.value);
+      e.target.value = formatted;
+      state.days[dayKey].time = formatted;
       persistState();
       render();
     });
+
+timeInput.addEventListener(
+  "wheel",
+  (e) => {
+    e.preventDefault();
+
+    const direction = e.deltaY < 0 ? 1 : -1;
+
+    const step = e.ctrlKey ? 10 : 30;
+
+    const nextTime = stepTimeValue(
+      state.days[dayKey].time || e.target.value,
+      step,
+      direction
+    );
+
+    e.target.value = nextTime;
+    state.days[dayKey].time = nextTime;
+
+    persistState();
+    render();
+  },
+  { passive: false }
+);
+
+timeInput.addEventListener("blur", (e) => {
+  const digits = String(e.target.value ?? "").replace(/\D/g, "");
+
+  if (digits.length === 3) {
+    const normalized = `0${digits[0]}:${digits.slice(1)}`;
+    e.target.value = normalized;
+    state.days[dayKey].time = normalized;
+  } else if (digits.length === 4) {
+    const normalized = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+    e.target.value = normalized;
+    state.days[dayKey].time = normalized;
+  }
+
+  persistState();
+  render();
+});
 
     timeField.appendChild(timeLabel);
     timeField.appendChild(timeInput);
@@ -605,6 +650,55 @@ function parseDisplayText(rawText = "") {
   }
 
   return { main, sub };
+}
+
+function formatTimeInput(value) {
+  const digits = String(value ?? "").replace(/\D/g, "").slice(0, 4);
+
+  if (!digits) return "";
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  let hours = digits.slice(0, 2);
+  let minutes = digits.slice(2, 4);
+
+  if (minutes.length === 2) {
+    const hNum = Math.min(23, Number(hours));
+    const mNum = Math.min(59, Number(minutes));
+    hours = String(hNum).padStart(2, "0");
+    minutes = String(mNum).padStart(2, "0");
+  }
+
+  return `${hours}:${minutes}`;
+}
+
+function stepTimeValue(currentValue, stepMinutes = 30, direction = 1) {
+  const digits = String(currentValue ?? "").replace(/\D/g, "");
+
+  let hours = 0;
+  let minutes = 0;
+
+  if (digits.length >= 3) {
+    const raw = digits.slice(0, 4).padStart(4, "0");
+    hours = Number(raw.slice(0, 2));
+    minutes = Number(raw.slice(2, 4));
+  } else if (digits.length === 1 || digits.length === 2) {
+    hours = Number(digits);
+    minutes = 0;
+  }
+
+  hours = Math.min(23, Math.max(0, hours));
+  minutes = Math.min(59, Math.max(0, minutes));
+
+  const total = hours * 60 + minutes;
+  const next = (total + direction * stepMinutes + 1440) % 1440;
+
+  const nextHours = Math.floor(next / 60);
+  const nextMinutes = next % 60;
+
+  return `${String(nextHours).padStart(2, "0")}:${String(nextMinutes).padStart(2, "0")}`;
 }
 
 function drawRowTexts(targetCtx, row, dayState) {
