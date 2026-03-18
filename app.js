@@ -320,7 +320,6 @@ function setCharacterImage(img, src = "") {
   state.character.x = 365;
   state.character.y = 560;
 
-  if (ui.characterRotation) ui.characterRotation.value = "0";
   if (ui.characterOpacity) ui.characterOpacity.value = "1";
 
   persistState();
@@ -896,14 +895,6 @@ async function restoreStateFromStorage() {
 
 function attachEvents() {
   ui.characterFile.addEventListener("change", handleCharacterUpload);
-
-  if (ui.characterRotation) {
-    ui.characterRotation.addEventListener("input", (e) => {
-      state.character.rotation = Number(e.target.value);
-      persistState();
-      render();
-    });
-  }
 
   if (ui.characterOpacity) {
     ui.characterOpacity.addEventListener("input", (e) => {
