@@ -226,7 +226,7 @@ function buildScheduleForm() {
     textInput.type = "text";
     textInput.dataset.day = dayKey;
     textInput.dataset.kind = "text";
-    textInput.placeholder = "예시: 방송 있음 (합방)";
+    textInput.placeholder = "메인 텍스트 (서브 텍스트)";
     textInput.value = dayState.text;
     textInput.addEventListener("input", (e) => {
       state.days[dayKey].text = e.target.value;
