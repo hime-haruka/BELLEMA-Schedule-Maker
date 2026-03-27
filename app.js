@@ -1,6 +1,6 @@
 const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
-const STORAGE_KEY = "bellema-schedule-state-v3";
+const STORAGE_KEY = "bellema-schedule-state-v6";
 
 const canvas = document.getElementById("previewCanvas");
 const ctx = canvas.getContext("2d");
@@ -8,6 +8,8 @@ const ctx = canvas.getContext("2d");
 const imagePaths = {
   backZ: "./static/images/back-z.jpg",
   back: "./static/images/back.png",
+  dateBadge: "./static/images/date.png",
+  artByFrame: "./static/images/artby-frame.png",
   rows: {
     mon: { on: "./static/images/mon-on.png", off: "./static/images/mon-off.png" },
     tue: { on: "./static/images/tue-on.png", off: "./static/images/tue-off.png" },
@@ -31,13 +33,13 @@ const dayLabelMap = {
 };
 
 const rowLayout = [
-  { key: "mon", x: 980, y: 80, w: 858, h: 150 },
-  { key: "tue", x: 873, y: 238, w: 858, h: 150 },
-  { key: "wed", x: 980, y: 397, w: 858, h: 150 },
-  { key: "thu", x: 873, y: 555, w: 858, h: 150 },
-  { key: "fri", x: 980, y: 713, w: 858, h: 150 },
-  { key: "sat", x: 873, y: 872, w: 858, h: 150 },
-  { key: "sun", x: 980, y: 1030, w: 858, h: 150 },
+  { key: "mon", x: 1000, y: 80, w: 858, h: 150 },
+  { key: "tue", x: 893, y: 238, w: 858, h: 150 },
+  { key: "wed", x: 1000, y: 397, w: 858, h: 150 },
+  { key: "thu", x: 893, y: 555, w: 858, h: 150 },
+  { key: "fri", x: 1000, y: 713, w: 858, h: 150 },
+  { key: "sat", x: 893, y: 872, w: 858, h: 150 },
+  { key: "sun", x: 1000, y: 1030, w: 858, h: 150 },
 ].map((row) => ({
   ...row,
   y: Math.round((row.y / 1260) * CANVAS_HEIGHT),
@@ -62,8 +64,24 @@ const textLayout = {
 
     timeXRatio: 0.892,
     timeYRatio: 0.48,
-    timeMaxWidthRatio: 0.10,
+    timeMaxWidthRatio: 0.1,
     timeFontSize: 22,
+  },
+  dateBadge: {
+    offsetX: -40,
+    size: 80,
+    textSize: 18,
+  },
+  artCredit: {
+    frameX: 0,
+    frameY: 20,
+    frameW: 300,
+    frameH: 85,
+    textOffsetX: -15,
+    textOffsetY: 2,
+    textMaxWidthRatio: 0.8,
+    fontSize: 23,
+    letterSpacing: 0.4,
   },
 };
 
@@ -71,6 +89,8 @@ const state = {
   assets: {
     backZ: null,
     back: null,
+    dateBadge: null,
+    artByFrame: null,
     rows: {},
   },
 
@@ -98,6 +118,9 @@ const state = {
     downInImageArea: false,
   },
 
+  weekOffset: 0,
+  artBy: "NAME",
+
   days: {
     mon: { enabled: true, text: "여기에 내용을 채워 주세요", time: "00:00" },
     tue: { enabled: true, text: "여기에 내용을 채워 주세요", time: "00:00" },
@@ -119,6 +142,9 @@ const ui = {
   removeCharacterBtn: document.getElementById("removeCharacterBtn"),
   scheduleForm: document.getElementById("scheduleForm"),
   saveBtn: document.getElementById("saveBtn"),
+  weekNav: null,
+  weekLabel: null,
+  artByInput: null,
 };
 
 function debounce(fn, wait = 200) {
@@ -150,6 +176,20 @@ async function preloadAssets() {
 
   state.assets.back = await loadImage(imagePaths.back);
 
+  try {
+    state.assets.dateBadge = await loadImage(imagePaths.dateBadge);
+  } catch (error) {
+    console.warn("date.png 로드 실패, 날짜 배지는 생략하고 진행");
+    state.assets.dateBadge = null;
+  }
+
+  try {
+    state.assets.artByFrame = await loadImage(imagePaths.artByFrame);
+  } catch (error) {
+    console.warn("artby-frame.png 로드 실패, ART BY 프레임은 생략하고 진행");
+    state.assets.artByFrame = null;
+  }
+
   for (const day of dayOrder) {
     const [onImg, offImg] = await Promise.all([
       loadImage(imagePaths.rows[day].on),
@@ -161,6 +201,137 @@ async function preloadAssets() {
       off: offImg,
     };
   }
+}
+
+function getTodayAtMidnight() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function getMondayOfWeek(baseDate) {
+  const date = new Date(baseDate);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(baseDate, days) {
+  const date = new Date(baseDate);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function getWeekDates(offset = 0) {
+  const monday = getMondayOfWeek(getTodayAtMidnight());
+  monday.setDate(monday.getDate() + offset * 7);
+
+  return dayOrder.reduce((acc, dayKey, index) => {
+    acc[dayKey] = addDays(monday, index);
+    return acc;
+  }, {});
+}
+
+function formatWeekLabel(offset = 0) {
+  const weekDates = getWeekDates(offset);
+  const start = weekDates.mon;
+  const end = weekDates.sun;
+
+  const prefix = offset === 0 ? "이번 주" : `${offset}주 뒤`;
+  const sameMonth = start.getMonth() === end.getMonth();
+  const rangeText = sameMonth
+    ? `${start.getMonth() + 1}.${start.getDate()} - ${end.getDate()}`
+    : `${start.getMonth() + 1}.${start.getDate()} - ${end.getMonth() + 1}.${end.getDate()}`;
+
+  return `${prefix} · ${rangeText}`;
+}
+
+function buildWeekNavigator() {
+  if (ui.weekNav) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "week-nav";
+  wrap.style.display = "flex";
+  wrap.style.gap = "8px";
+  wrap.style.alignItems = "center";
+  wrap.style.marginBottom = "14px";
+  wrap.style.flexWrap = "wrap";
+
+  const todayBtn = document.createElement("button");
+  todayBtn.type = "button";
+  todayBtn.textContent = "이번 주";
+  todayBtn.addEventListener("click", () => {
+    state.weekOffset = 0;
+    updateWeekLabel();
+    persistState();
+    render();
+  });
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.textContent = "다음 주 →";
+  nextBtn.addEventListener("click", () => {
+    state.weekOffset += 1;
+    updateWeekLabel();
+    persistState();
+    render();
+  });
+
+  const label = document.createElement("div");
+  label.className = "week-nav__label";
+  label.style.display = "none";
+
+  wrap.appendChild(todayBtn);
+  wrap.appendChild(nextBtn);
+  wrap.appendChild(label);
+
+  ui.scheduleForm.parentNode.insertBefore(wrap, ui.scheduleForm);
+  ui.weekNav = wrap;
+  ui.weekLabel = label;
+
+  updateWeekLabel();
+}
+
+function updateWeekLabel() {
+  if (!ui.weekLabel) return;
+  ui.weekLabel.textContent = formatWeekLabel(state.weekOffset);
+}
+
+function buildArtCreditField() {
+  if (ui.artByInput) return;
+
+  const imageSection = ui.characterFile?.closest(".section");
+  if (!imageSection) return;
+
+  const hint = imageSection.querySelector(".hint");
+
+  const field = document.createElement("div");
+  field.className = "field";
+
+  const label = document.createElement("label");
+  label.setAttribute("for", "artByInput");
+  label.textContent = "ART BY";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "artByInput";
+  input.maxLength = 28;
+  input.placeholder = "작가명 입력";
+  input.value = state.artBy;
+
+  const help = document.createElement("p");
+  help.className = "field__hint";
+  help.textContent = "좌측 상단 ART BY 프레임 안에 들어갈 이름이에요.";
+
+  field.appendChild(label);
+  field.appendChild(input);
+  field.appendChild(help);
+
+  imageSection.insertBefore(field, hint || null);
+
+  ui.artByInput = input;
 }
 
 function buildScheduleForm() {
@@ -252,7 +423,6 @@ function buildScheduleForm() {
     timeInput.type = "text";
     timeInput.inputMode = "numeric";
     timeInput.maxLength = 5;
-    timeInput.maxLength = 5;
     timeInput.placeholder = "00:00";
     timeInput.dataset.day = dayKey;
     timeInput.dataset.kind = "time";
@@ -265,46 +435,45 @@ function buildScheduleForm() {
       render();
     });
 
-timeInput.addEventListener(
-  "wheel",
-  (e) => {
-    e.preventDefault();
+    timeInput.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
 
-    const direction = e.deltaY < 0 ? 1 : -1;
+        const direction = e.deltaY < 0 ? 1 : -1;
+        const step = e.ctrlKey ? 10 : 30;
 
-    const step = e.ctrlKey ? 10 : 30;
+        const nextTime = stepTimeValue(
+          state.days[dayKey].time || e.target.value,
+          step,
+          direction
+        );
 
-    const nextTime = stepTimeValue(
-      state.days[dayKey].time || e.target.value,
-      step,
-      direction
+        e.target.value = nextTime;
+        state.days[dayKey].time = nextTime;
+
+        persistState();
+        render();
+      },
+      { passive: false }
     );
 
-    e.target.value = nextTime;
-    state.days[dayKey].time = nextTime;
+    timeInput.addEventListener("blur", (e) => {
+      const digits = String(e.target.value ?? "").replace(/\D/g, "");
 
-    persistState();
-    render();
-  },
-  { passive: false }
-);
+      if (digits.length === 3) {
+        const normalized = `0${digits[0]}:${digits.slice(1)}`;
+        e.target.value = normalized;
+        state.days[dayKey].time = normalized;
+      } else if (digits.length === 4) {
+        const normalized = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+        e.target.value = normalized;
+        state.days[dayKey].time = normalized;
+      }
 
-timeInput.addEventListener("blur", (e) => {
-  const digits = String(e.target.value ?? "").replace(/\D/g, "");
-
-  if (digits.length === 3) {
-    const normalized = `0${digits[0]}:${digits.slice(1)}`;
-    e.target.value = normalized;
-    state.days[dayKey].time = normalized;
-  } else if (digits.length === 4) {
-    const normalized = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
-    e.target.value = normalized;
-    state.days[dayKey].time = normalized;
-  }
-
-  persistState();
-  render();
-});
+      persistState();
+      render();
+    });
 
     timeField.appendChild(timeLabel);
     timeField.appendChild(timeInput);
@@ -327,6 +496,10 @@ function syncScheduleInputs() {
     const kind = input.dataset.kind;
     input.value = state.days[day][kind];
   });
+
+  if (ui.artByInput) {
+    ui.artByInput.value = state.artBy;
+  }
 
   dayOrder.forEach((dayKey) => {
     const card = ui.scheduleForm.querySelector(`.day-card[data-day="${dayKey}"]`);
@@ -422,6 +595,44 @@ function drawBackground(targetCtx) {
   }
 }
 
+function drawArtCredit(targetCtx) {
+  const value = String(state.artBy ?? "").trim() || "NAME";
+  const layout = textLayout.artCredit;
+
+  if (state.assets.artByFrame) {
+    targetCtx.drawImage(
+      state.assets.artByFrame,
+      layout.frameX,
+      layout.frameY,
+      layout.frameW,
+      layout.frameH
+    );
+  }
+
+  drawCyberText(targetCtx, {
+    text: value,
+    x: layout.frameX + layout.frameW / 2 + layout.textOffsetX,
+    y: layout.frameY + layout.frameH / 2 + layout.textOffsetY,
+    maxWidth: layout.frameW * layout.textMaxWidthRatio,
+    initialSize: layout.fontSize,
+    align: "center",
+    baseline: "middle",
+    fontWeight: 700,
+    fontFamily: "KblJump",
+    gradientColors: ["#f0fdff", "#78ecff", "#2b95ff"],
+    strokeColor: "rgba(42, 110, 255, 0)",
+    strokeWidth: 2,
+    outerGlowColor: "rgba(28, 145, 255, 0.24)",
+    outerGlowBlur: 8,
+    innerShadowColor: "rgba(6, 18, 96, 0.48)",
+    innerShadowOffsetY: 1,
+    innerShadowStart: 0.42,
+    highlightColor: "rgba(255,255,255,0.16)",
+    highlightEnd: 0.22,
+    letterSpacing: layout.letterSpacing,
+  });
+}
+
 function drawCharacter(targetCtx) {
   const char = state.character;
   if (!char.image) return;
@@ -448,14 +659,60 @@ function drawCharacter(targetCtx) {
   targetCtx.restore();
 }
 
+function getDateBadgeRect(row) {
+  const size = textLayout.dateBadge.size;
+  return {
+    x: Math.round(row.x + textLayout.dateBadge.offsetX - size / 2),
+    y: Math.round(row.y + row.h / 2 - size / 2),
+    w: size,
+    h: size,
+  };
+}
+
 function drawRows(targetCtx) {
+  const weekDates = getWeekDates(state.weekOffset);
+
   rowLayout.forEach((row) => {
     const dayState = state.days[row.key];
     const rowImage = state.assets.rows[row.key]?.[dayState.enabled ? "on" : "off"];
     if (!rowImage) return;
 
     targetCtx.drawImage(rowImage, row.x, row.y, row.w, row.h);
+    drawDateBadge(targetCtx, row, weekDates[row.key]);
     drawRowTexts(targetCtx, row, dayState);
+  });
+}
+
+function drawDateBadge(targetCtx, row, dateObj) {
+  if (!dateObj) return;
+
+  const badge = getDateBadgeRect(row);
+
+  if (state.assets.dateBadge) {
+    targetCtx.drawImage(state.assets.dateBadge, badge.x, badge.y, badge.w, badge.h);
+  }
+
+  drawCyberText(targetCtx, {
+    text: String(dateObj.getDate()),
+    x: badge.x + badge.w / 2,
+    y: badge.y + badge.h / 2 + 1,
+    maxWidth: badge.w * 0.68,
+    initialSize: textLayout.dateBadge.textSize,
+    align: "center",
+    baseline: "middle",
+    fontWeight: 700,
+    fontFamily: "KblJump",
+    gradientColors: ["#eafcff", "#7cefff", "#2b95ff"],
+    strokeColor: "rgba(34, 110, 255, 0)",
+    strokeWidth: 2,
+    outerGlowColor: "rgba(30, 146, 255, 0.26)",
+    outerGlowBlur: 8,
+    innerShadowColor: "rgba(8, 23, 114, 0.52)",
+    innerShadowOffsetY: 1,
+    innerShadowStart: 0.48,
+    highlightColor: "rgba(255,255,255,0.14)",
+    highlightEnd: 0.22,
+    letterSpacing: 0.6,
   });
 }
 
@@ -769,9 +1026,7 @@ function drawRowTexts(targetCtx, row, dayState) {
     targetCtx.restore();
   }
 
-  const totalTextWidth = subText
-    ? mainWidth + subGap + subWidth
-    : mainWidth;
+  const totalTextWidth = subText ? mainWidth + subGap + subWidth : mainWidth;
 
   const lineLeft = contentCenterX - totalTextWidth / 2;
   const mainCenterX = lineLeft + mainWidth / 2;
@@ -852,6 +1107,7 @@ function render(targetCanvas = canvas, targetCtx = ctx) {
   drawBackgroundZ(targetCtx);
   drawCharacter(targetCtx);
   drawBackground(targetCtx);
+  drawArtCredit(targetCtx);
   drawRows(targetCtx);
 }
 
@@ -922,6 +1178,8 @@ function updateCanvasHoverState(event) {
 
 function saveStateToStorage() {
   const payload = {
+    weekOffset: state.weekOffset,
+    artBy: state.artBy,
     days: state.days,
     character: {
       src: state.character.src,
@@ -948,6 +1206,14 @@ async function restoreStateFromStorage() {
 
   try {
     const saved = JSON.parse(raw);
+
+    if (typeof saved.weekOffset === "number") {
+      state.weekOffset = saved.weekOffset;
+    }
+
+    if (typeof saved.artBy === "string") {
+      state.artBy = saved.artBy;
+    }
 
     if (saved.days) {
       state.days = {
@@ -989,6 +1255,14 @@ async function restoreStateFromStorage() {
 
 function attachEvents() {
   ui.characterFile.addEventListener("change", handleCharacterUpload);
+
+  if (ui.artByInput) {
+    ui.artByInput.addEventListener("input", (e) => {
+      state.artBy = e.target.value;
+      persistState();
+      render();
+    });
+  }
 
   if (ui.characterOpacity) {
     ui.characterOpacity.addEventListener("input", (e) => {
@@ -1076,33 +1350,31 @@ function attachEvents() {
     }
   });
 
-canvas.addEventListener(
-  "wheel",
-  (e) => {
-    if (!state.character.image) return;
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      if (!state.character.image) return;
 
-    const pos = getCanvasPointerPosition(e);
-    if (!isPointInsideCharacter(pos.x, pos.y)) return;
+      const pos = getCanvasPointerPosition(e);
+      if (!isPointInsideCharacter(pos.x, pos.y)) return;
 
-    e.preventDefault();
+      e.preventDefault();
 
-    if (e.ctrlKey) {
-      const rotateStep = 2;
-      state.character.rotation += e.deltaY < 0 ? rotateStep : -rotateStep;
+      if (e.ctrlKey) {
+        const rotateStep = 2;
+        state.character.rotation += e.deltaY < 0 ? rotateStep : -rotateStep;
+        state.character.rotation = ((state.character.rotation % 360) + 360) % 360;
+      } else {
+        const scaleStep = 1.05;
+        const delta = e.deltaY < 0 ? scaleStep : 1 / scaleStep;
+        state.character.scale = clamp(state.character.scale * delta, 0.2, 3);
+      }
 
-      state.character.rotation =
-        ((state.character.rotation % 360) + 360) % 360;
-    } else {
-      const scaleStep = 1.05;
-      const delta = e.deltaY < 0 ? scaleStep : 1 / scaleStep;
-      state.character.scale = clamp(state.character.scale * delta, 0.2, 3);
-    }
-
-    persistState();
-    render();
-  },
-  { passive: false }
-);
+      persistState();
+      render();
+    },
+    { passive: false }
+  );
 
   ui.saveBtn.addEventListener("click", () => {
     const exportCanvas = document.createElement("canvas");
@@ -1120,12 +1392,15 @@ canvas.addEventListener(
 }
 
 async function init() {
+  buildWeekNavigator();
+  buildArtCreditField();
   buildScheduleForm();
   attachEvents();
 
   try {
     await preloadAssets();
     await restoreStateFromStorage();
+    updateWeekLabel();
     syncScheduleInputs();
     render();
   } catch (error) {
